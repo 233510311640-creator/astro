@@ -37,3 +37,11 @@ dist/
 *.suo
 Thumbs.db
 Desktop.ini
+
+# Task Observer's local session notes (may contain private work context)
+skill-observations/
+skill-updates/
+
+# Graphify's generated project graph
+graphify-out/
+.claude/*.graphify-bak
