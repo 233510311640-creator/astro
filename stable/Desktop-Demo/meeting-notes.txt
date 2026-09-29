@@ -1,0 +1,3 @@
+Cypher desktop demo
+
+This disposable sample should move into Documents, then return here after undo.

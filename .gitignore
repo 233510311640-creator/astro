@@ -1,0 +1,39 @@
+# Generated Python and test files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local settings, credentials, and runtime state
+.env
+.env.*
+!.env.example
+api_key.bin
+host_config.json
+heartbeat.json
+host-events.jsonl
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.pfx
+*.p12
+*.key
+*.token
+*.secret
+
+# Local builds and editor state
+bin/
+obj/
+build/
+dist/
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini

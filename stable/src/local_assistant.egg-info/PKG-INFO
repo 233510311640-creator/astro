@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: local-assistant
+Version: 0.10.13a3
+Summary: Permission-controlled local Windows assistant with verified task execution
+Requires-Python: >=3.12

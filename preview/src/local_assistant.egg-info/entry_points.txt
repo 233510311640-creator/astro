@@ -1,0 +1,4 @@
+[console_scripts]
+local-capability-broker = local_assistant.broker_mcp:main
+local-capability-broker-admin = local_assistant.broker_admin:main
+local-inventory-admin = local_assistant.inventory_admin:main
