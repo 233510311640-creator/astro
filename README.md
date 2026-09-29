@@ -1,5 +1,7 @@
 # Cypher — local Windows assistant
 
+For the current feature list, verification results, and remaining work, see [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 This repository contains the current Cypher project in two self-contained bundles:
 
 - [`stable/`](stable/) — Core Preview 10.20.3, the version currently installed and running on the development PC. `Ctrl+Alt+Space` starts a voice command; holding `Ctrl+Win+Alt` opens the chat.
