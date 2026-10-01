@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +88,53 @@ class ClaimCheckTests(unittest.TestCase):
         self.assertEqual(s.uncited_official("Answer [1].", results), [])
         self.assertTrue(s.only_snippets_cited("Answer [2].", results))
         self.assertFalse(s.only_snippets_cited("Answer [1].", results))
+
+
+class FreshnessTests(unittest.TestCase):
+    TODAY = date(2026, 10, 1)
+
+    def test_time_sensitive_detection(self):
+        self.assertTrue(s.is_time_sensitive("What is the latest stable Python version?"))
+        self.assertTrue(s.is_time_sensitive("What was the most recent Fed decision?"))
+        self.assertFalse(s.is_time_sensitive("In what year was Python 1.0 released?"))
+        self.assertIn("current information", s.build_system(False, True))
+        self.assertNotIn("current information", s.build_system(False))
+
+    def test_page_date_prefers_metadata_then_text(self):
+        html = '<meta property="article:published_time" content="2026-09-02T10:00:00Z">'
+        self.assertEqual(s.page_date(html, "", self.TODAY), date(2026, 9, 2))
+        self.assertEqual(s.page_date("", "Released Aug 5, 2026. Next on Dec 1, 2027.", self.TODAY), date(2026, 8, 5))
+        self.assertIsNone(s.page_date("", "no dates here", self.TODAY))
+
+    def test_freshness_verdict(self):
+        official = {"url": "https://www.python.org/downloads/", "page_full": "x", "date": "2026-09-01"}
+        self.assertTrue(s.freshness_verdict([official], self.TODAY)[0])
+        stale = dict(official, date="2025-01-01")
+        self.assertFalse(s.freshness_verdict([stale], self.TODAY)[0])
+        wiki = dict(official, url="https://en.wikipedia.org/wiki/Python")
+        self.assertFalse(s.freshness_verdict([wiki], self.TODAY)[0])
+        self.assertFalse(s.freshness_verdict([dict(official, page_full="")], self.TODAY)[0])
+
+    def test_newer_source_conflict_catches_stale_version(self):
+        old = {"url": "https://a.example/1", "page_full": "Python 3.12.1 is current.", "date": "2025-01-01"}
+        new = {"url": "https://www.python.org/d", "page_full": "Python 3.14.6 is current.", "date": "2026-09-01"}
+        hit = s.newer_source_conflicts("The latest is Python 3.12.1 [1].", [old, new])
+        self.assertEqual(hit[0], 2)
+        self.assertIn("3.12.1", hit[2])
+        self.assertIsNone(s.newer_source_conflicts("The latest is Python 3.14.6 [2].", [old, new]))
+
+    def test_unsafe_version_claim_withholds_stale_or_unbacked_version(self):
+        page = {"url": "https://www.python.org/downloads/", "page_full": "Python 3.14.7 is out. Earlier: 3.14.6, 3.13.9."}
+        self.assertIn("3.14.7", s.unsafe_version_claim("The latest is Python 3.14.6 [1].", [page]))
+        self.assertIsNone(s.unsafe_version_claim("The latest is Python 3.14.7 [1].", [page]))
+        self.assertIn("not on any", s.unsafe_version_claim("The latest is Python 3.15.2 [1].", [page]))
+        snippet_only = {"url": "https://en.wikipedia.org/wiki/Python", "page_full": ""}
+        self.assertIsNone(s.unsafe_version_claim("The latest is Python 3.14.6 [1].", [snippet_only]))
+        self.assertIsNone(s.unsafe_version_claim("The Fed raised rates 0.25 points [1].", [page]))
+        q = "What is the latest stable release of Python?"
+        self.assertIn("no full version", s.unsafe_version_claim("Python 3.14 is the latest stable release [1].", [page], q))
+        self.assertIsNone(s.unsafe_version_claim("Python 3.14 is the latest stable release [1].", [page]))
+        self.assertIsNone(s.unsafe_version_claim("The Fed raised rates 0.25 points [1].", [page], "What was the latest Fed decision?"))
 
 
 class QuestionSetTests(unittest.TestCase):

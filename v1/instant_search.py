@@ -20,6 +20,7 @@ import socket
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -30,6 +31,8 @@ DEFAULT_MODEL = "qwen3.5:9b-q4_K_M"
 SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
 
 FETCH_PAGES = 2
+FETCH_PAGES_FRESH = 3       # time-sensitive questions fetch one more page (no extra search)
+FRESH_DAYS = 180            # a time-sensitive answer needs a fetched OFFICIAL/NEWS page this recent
 FETCH_TIMEOUT = 6
 FETCH_MAX_BYTES = 300_000
 FETCH_TEXT_CHARS = 20_000   # kept for claim checking
@@ -51,6 +54,8 @@ SYSTEM_RULES = (
 )
 ADVICE_ON = "7. This is a health, legal or financial topic: add one short line advising the user to check with a qualified professional.\n"
 ADVICE_OFF = "7. This is not a health, legal or financial question: do not add any advice to consult a professional.\n"
+FRESH_RULE = ("8. This question asks for current information. Each source shows its date. State the date of the "
+              "source behind each current claim, prefer the newest-dated source, and say so if sources disagree.\n")
 SYSTEM_TAIL = "Maximum five sentences. Never request passwords, one-time codes, or banking credentials."
 
 OFFICIAL_SUFFIXES = (".gov", ".mil", ".int", ".gov.in", ".gov.uk", ".gov.au")
@@ -89,6 +94,22 @@ SENSITIVE_PATTERN = re.compile(
     r"invest\w*|stocks?|tax(es)?|loan|mortgage|retirement|crypto\w*|should i buy)\b",
     re.IGNORECASE,
 )
+TIME_SENSITIVE_PATTERN = re.compile(
+    r"\b(latest|current(ly)?|most recent|newest|recent(ly)?|now|today|this (year|month|week)|as of)\b",
+    re.IGNORECASE,
+)
+ISO_DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+META_DATE = re.compile(
+    r"<meta[^>]+(?:property|name|itemprop)=[\"'](?:article:published_time|article:modified_time|og:updated_time|"
+    r"datePublished|dateModified)[\"'][^>]*content=[\"']([^\"']+)|"
+    r"\"date(?:Published|Modified)\"\s*:\s*\"([^\"]+)|"
+    r"<time[^>]+datetime=[\"']([^\"']+)",
+    re.IGNORECASE,
+)
+TEXT_DATE = re.compile(
+    r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b")
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+VERSION = re.compile(r"(?<![\d.])\d+(?:\.\d+){2,}(?![\d.])")
 STOPWORDS = {
     "what", "which", "when", "where", "does", "how", "the", "and", "for", "with", "from", "that", "this", "are",
     "was", "were", "has", "have", "most", "recent", "latest", "current", "about", "into", "than", "there",
@@ -98,13 +119,70 @@ NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?%?")
 TAGS = re.compile(r"<[^>]+>")
 
 
-def build_system(sensitive: bool) -> str:
-    return SYSTEM_RULES + (ADVICE_ON if sensitive else ADVICE_OFF) + SYSTEM_TAIL
+def build_system(sensitive: bool, time_sensitive: bool = False) -> str:
+    return SYSTEM_RULES + (ADVICE_ON if sensitive else ADVICE_OFF) + (FRESH_RULE if time_sensitive else "") + SYSTEM_TAIL
 
 
 def is_sensitive(question: str) -> bool:
     """True for health, legal or financial questions, where a professional-advice line is appropriate."""
     return bool(SENSITIVE_PATTERN.search(question))
+
+
+def is_time_sensitive(question: str) -> bool:
+    """True when the answer depends on what is current, so source dates matter."""
+    return bool(TIME_SENSITIVE_PATTERN.search(question))
+
+
+def parse_iso(value: str | None) -> date | None:
+    match = ISO_DATE.search(value or "")
+    if not match:
+        return None
+    try:
+        return date(*map(int, match.groups()))
+    except ValueError:
+        return None
+
+
+def page_date(raw_html: str, text: str = "", today: date | None = None) -> date | None:
+    """Best-effort date of a fetched page: page metadata first, else the newest past date written in its text."""
+    today = today or date.today()
+    for groups in META_DATE.findall(raw_html):
+        found = parse_iso(next((g for g in groups if g), ""))
+        if found:
+            return found
+    mentioned = []
+    for month, day, year in TEXT_DATE.findall(text):
+        try:
+            when = date(int(year), MONTHS[month.lower()], int(day))
+        except ValueError:
+            continue
+        if when <= today:
+            mentioned.append(when)
+    return max(mentioned) if mentioned else None
+
+
+def annotate_dates(results: list[dict]) -> None:
+    """Take the search API's own page date (no extra request) as each result's date."""
+    for r in results:
+        found = parse_iso(r.get("page_age") or "")
+        if found:
+            r["date"] = found.isoformat()
+
+
+def freshness_verdict(results: list[dict], today: date | None = None, max_days: int = FRESH_DAYS) -> tuple[bool, str]:
+    """A time-sensitive answer needs a fetched OFFICIAL/NEWS page whose date is recent enough."""
+    today = today or date.today()
+    best = None
+    for r in results:
+        found = parse_iso(r.get("date"))
+        if tier(r["url"]) <= 1 and r.get("page_full") and found and found <= today:
+            if best is None or found > best:
+                best = found
+    if best is None:
+        return False, "no fetched official or news page with a date"
+    if (today - best).days > max_days:
+        return False, f"newest fetched official or news page is dated {best.isoformat()}, over {max_days} days old"
+    return True, f"newest fetched official or news page is dated {best.isoformat()}"
 
 
 def host_of(url: str) -> str:
@@ -189,21 +267,26 @@ def is_public_http_url(url: str) -> bool:
     return bool(addresses)
 
 
-def fetch_text(url: str) -> str:
-    """Bounded, best-effort page text. Returns '' on any problem."""
+def fetch_page(url: str) -> tuple[str, date | None]:
+    """Bounded, best-effort page text and date. Returns ('', None) on any problem."""
     if not is_public_http_url(url):
-        return ""
+        return "", None
     try:
         request = Request(url, headers={"User-Agent": "Mozilla/5.0 (CypherResearch)", "Accept": "text/html"})
         with urlopen(request, timeout=FETCH_TIMEOUT) as response:
             if "html" not in (response.headers.get("Content-Type") or "").lower():
-                return ""
-            raw = response.read(FETCH_MAX_BYTES)
+                return "", None
+            raw = response.read(FETCH_MAX_BYTES).decode("utf-8", errors="replace")
         parser = _Text()
-        parser.feed(raw.decode("utf-8", errors="replace"))
-        return " ".join(parser.parts)[:FETCH_TEXT_CHARS]
+        parser.feed(raw)
+        text = " ".join(parser.parts)[:FETCH_TEXT_CHARS]
+        return text, page_date(raw, text)
     except Exception:
-        return ""
+        return "", None
+
+
+def fetch_text(url: str) -> str:
+    return fetch_page(url)[0]
 
 
 def keywords(query: str) -> set[str]:
@@ -229,15 +312,17 @@ def focus_excerpt(text: str, query: str, limit: int = PAGE_CHARS, chunk_words: i
     return " ... ".join(chunks[i] for i in sorted(keep))
 
 
-def enrich(results: list[dict], query: str) -> None:
-    """Attach page text to the best-tier results (in place), fetching in parallel."""
+def enrich(results: list[dict], query: str, limit: int = FETCH_PAGES) -> None:
+    """Attach page text and date to the best-tier results (in place), fetching in parallel."""
     ranked = sorted(range(len(results)), key=lambda i: (tier(results[i]["url"]), i))
-    chosen = [i for i in ranked if tier(results[i]["url"]) < 3][:FETCH_PAGES]
-    with ThreadPoolExecutor(max_workers=FETCH_PAGES) as pool:
-        for i, text in zip(chosen, pool.map(lambda i: fetch_text(results[i]["url"]), chosen)):
+    chosen = [i for i in ranked if tier(results[i]["url"]) < 3][:limit]
+    with ThreadPoolExecutor(max_workers=max(limit, 1)) as pool:
+        for i, (text, found) in zip(chosen, pool.map(lambda i: fetch_page(results[i]["url"]), chosen)):
             if len(text) > 200:
                 results[i]["page_full"] = text
                 results[i]["page_text"] = focus_excerpt(text, query)
+                if found and not results[i].get("date"):
+                    results[i]["date"] = found.isoformat()
 
 
 def source_text(result: dict) -> str:
@@ -259,6 +344,7 @@ def claim_tokens(sentence: str) -> list[str]:
         if len(digits) < 2 and "." not in digits and not token.endswith("%"):
             continue                               # lone small integers are mostly prose
         tokens.append(token)
+    tokens.extend(VERSION.findall(body))           # 3.14.6 would otherwise shrink to 3.14
     if "unanimous" in body.lower():
         tokens.append("unanimous")
     return tokens
@@ -298,20 +384,68 @@ def uncited_official(text: str, results: list[dict]) -> list[int]:
             and all(token_in(tok, source_text(r)) for tok in tokens)]
 
 
+def newer_source_conflicts(text: str, results: list[dict]) -> tuple[int, str, list[str]] | None:
+    """Figures in the answer that the newest dated, fetched source does not contain.
+
+    Returns (source number, its date, figures) or None. Years are ignored: a page need not repeat them.
+    """
+    dated = [(parse_iso(r.get("date")), i) for i, r in enumerate(results, 1) if r.get("page_full")]
+    dated = [(d, i) for d, i in dated if d]
+    if not dated:
+        return None
+    newest, index = max(dated)
+    haystack = source_text(results[index - 1])
+    tokens = [tok for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z\[])", text) for tok in claim_tokens(sentence)]
+    absent = sorted({t for t in tokens if not re.fullmatch(r"(19|20)\d\d", t) and not token_in(t, haystack)})
+    return (index, newest.isoformat(), absent) if absent else None
+
+
+ASKS_VERSION = re.compile(r"\b(versions?|releases?)\b", re.IGNORECASE)
+
+
+def unsafe_version_claim(text: str, results: list[dict], question: str = "") -> str | None:
+    """Why a version number in the answer cannot be trusted, or None.
+
+    A "latest version" answer is only safe when every version it states appears in a fetched official or
+    news page, and no such page shows a newer patch release of the same line (3.14.6 vs 3.14.7).
+    """
+    claimed = sorted(set(VERSION.findall(text)))
+    pages = [r["page_full"] for r in results if tier(r["url"]) <= 1 and r.get("page_full")]
+    seen = {v for page in pages for v in VERSION.findall(page)}
+    if not claimed:
+        # A vague "3.14 is the latest" hides which patch release is current, so it is withheld too.
+        if ASKS_VERSION.search(question) and seen:
+            return "the draft names no full version number although fetched pages list them"
+        return None
+    if not pages:
+        return None
+    for version in claimed:
+        if version not in seen:
+            return f"version {version} is not on any fetched official or news page"
+        line = version.rsplit(".", 1)[0]
+        newer = sorted((v for v in seen if v.rsplit(".", 1)[0] == line and v.count(".") == version.count(".")
+                        and int(v.rsplit(".", 1)[1]) > int(version.rsplit(".", 1)[1])),
+                       key=lambda v: int(v.rsplit(".", 1)[1]))
+        if newer:
+            return f"a fetched official or news page shows {newer[-1]}, newer than the stated {version}"
+    return None
+
+
 def only_snippets_cited(text: str, results: list[dict]) -> bool:
     cited = [results[i - 1] for i in cited_indices(text) if 1 <= i <= len(results)]
     return bool(cited) and not any(r.get("page_text") for r in cited)
 
 
 def answer(query: str, results: list[dict], model: str, num_ctx: int, sensitive: bool,
-           on_text=None) -> tuple[str, dict, float | None]:
+           on_text=None, time_sensitive: bool = False) -> tuple[str, dict, float | None]:
     """Stream the model's answer. Returns (text, final ollama metadata, perf_counter at first text)."""
     blocks = []
     for i, r in enumerate(results, 1):
         body = r.get("page_text") or TAGS.sub("", r.get("description", ""))
         used = "page" if r.get("page_text") else "snippet"
+        when = (f" dated {r['date']}" if r.get("date") else " undated") if time_sensitive else ""
         blocks.append(
-            f"[{i}] {label_of(r['url'])} ({used} text) | {r.get('title', '')} ({host_of(r['url'])})\n{body}"
+            f"[{i}] {label_of(r['url'])} ({used} text{when}) | {r.get('title', '')} ({host_of(r['url'])})\n{body}"
         )
     payload = {
         "model": model,
@@ -319,7 +453,7 @@ def answer(query: str, results: list[dict], model: str, num_ctx: int, sensitive:
         "think": False,
         "keep_alive": "30m",
         "messages": [
-            {"role": "system", "content": build_system(sensitive)},
+            {"role": "system", "content": build_system(sensitive, time_sensitive)},
             {"role": "user", "content": f"Question: {query}\n\nSources:\n" + "\n\n".join(blocks)},
         ],
         "options": {"num_ctx": num_ctx, "num_predict": 450, "temperature": 0.2},
@@ -377,16 +511,35 @@ def main() -> int:
     results = sorted(results, key=lambda r: tier(r["url"]))[:5]
     t_search = time.perf_counter() - t0
 
+    time_sensitive = is_time_sensitive(args.question)
     t1 = time.perf_counter()
     if not (args.no_fetch or args.sample):
-        enrich(results, args.question)
+        annotate_dates(results)
+        enrich(results, args.question, FETCH_PAGES_FRESH if time_sensitive else FETCH_PAGES)
+        if time_sensitive:
+            fresh, why = freshness_verdict(results)
+            if not fresh:
+                print(f"Cannot establish that these sources are current ({why}); not answering.\n\nSources:")
+                for i, r in enumerate(results, 1):
+                    print(f"  [{i}] {label_of(r['url'])} ({r.get('date') or 'undated'}) {r.get('title', '')} - {r['url']}")
+                return 2
     t_fetch = time.perf_counter() - t1
 
     t2 = time.perf_counter()
+    # Time-sensitive answers are held back until the version check passes, so a stale one is never shown.
     text, meta, first = answer(args.question, results, args.model, args.num_ctx,
                                is_sensitive(args.question),
-                               on_text=lambda piece: print(piece, end="", flush=True))
+                               on_text=None if time_sensitive else (lambda piece: print(piece, end="", flush=True)),
+                               time_sensitive=time_sensitive)
     t_model = time.perf_counter() - t2
+    if time_sensitive:
+        unsafe = unsafe_version_claim(text, results, args.question)
+        if unsafe:
+            print(f"Not answering: the draft states a version that may be out of date ({unsafe}).\n\nSources:")
+            for i, r in enumerate(results, 1):
+                print(f"  [{i}] {label_of(r['url'])} ({r.get('date') or 'undated'}) {r.get('title', '')} - {r['url']}")
+            return 3
+        print(text, end="")
     if not text:
         print("(model returned no text)", end="")
     print()
@@ -394,9 +547,15 @@ def main() -> int:
     print("\nSources:")
     for i, r in enumerate(results, 1):
         used = "page" if r.get("page_text") else "snippet"
-        print(f"  [{i}] {label_of(r['url'])} ({used}) {r.get('title', '')} - {r['url']}")
+        when = f", {r['date']}" if r.get("date") else ""
+        print(f"  [{i}] {label_of(r['url'])} ({used}{when}) {r.get('title', '')} - {r['url']}")
 
     print("\nChecks:")
+    if time_sensitive:
+        conflict = newer_source_conflicts(text, results)
+        if conflict:
+            index, when, absent = conflict
+            print(f"  Not found in newest dated source [{index}] ({when}): {', '.join(absent)}")
     checked, missing = verify_claims(text, results)
     if missing:
         print(f"  Unverified in cited sources: {', '.join(missing)}")
