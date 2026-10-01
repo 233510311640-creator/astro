@@ -431,6 +431,30 @@ def unsafe_version_claim(text: str, results: list[dict], question: str = "") -> 
     return None
 
 
+PYTHON_RELEASES_API = "https://www.python.org/api/v2/downloads/release/?is_published=true"
+
+
+def official_python_latest(today: date | None = None) -> dict | None:
+    """The newest stable Python 3 release straight from python.org's release feed, as a fetched official source."""
+    today = today or date.today()
+    try:
+        request = Request(PYTHON_RELEASES_API, headers={"User-Agent": "Mozilla/5.0 (CypherResearch)"})
+        with urlopen(request, timeout=FETCH_TIMEOUT) as response:
+            releases = json.loads(response.read(8_000_000))
+        stable = []
+        for r in releases:
+            number = re.fullmatch(r"Python (\d+)\.(\d+)\.(\d+)", r.get("name", ""))
+            released = parse_iso(r.get("release_date"))
+            if r.get("version") == 3 and not r.get("pre_release") and number and released and released <= today:
+                stable.append((tuple(map(int, number.groups())), released, r["name"]))
+        _, released, name = max(stable)             # highest version number: older lines get later security releases
+    except Exception:
+        return None
+    line = f"Latest stable release: {name}, released {released.isoformat()} (python.org release feed, read {today.isoformat()})."
+    return {"url": "https://www.python.org/downloads/", "title": "Python releases (python.org release feed)",
+            "description": line, "page_full": line, "page_text": line, "date": today.isoformat()}
+
+
 def only_snippets_cited(text: str, results: list[dict]) -> bool:
     cited = [results[i - 1] for i in cited_indices(text) if 1 <= i <= len(results)]
     return bool(cited) and not any(r.get("page_text") for r in cited)
@@ -516,6 +540,14 @@ def main() -> int:
     if not (args.no_fetch or args.sample):
         annotate_dates(results)
         enrich(results, args.question, FETCH_PAGES_FRESH if time_sensitive else FETCH_PAGES)
+        if time_sensitive and re.search(r"\bpython\b", args.question, re.IGNORECASE) and ASKS_VERSION.search(args.question):
+            feed = official_python_latest()
+            if feed:
+                # The feed is the data: answer from it directly rather than let a small model second-guess it.
+                print(f"{feed['page_full']} [1]\n\nSources:\n  [1] OFFICIAL/INSTITUTIONAL (feed, {feed['date']}) "
+                      f"{feed['title']} - {PYTHON_RELEASES_API}")
+                print(f"\nfirst text {time.perf_counter() - t0:.2f}s | no model used")
+                return 0
         if time_sensitive:
             fresh, why = freshness_verdict(results)
             if not fresh:

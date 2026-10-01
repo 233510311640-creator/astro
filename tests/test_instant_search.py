@@ -1,6 +1,7 @@
 import json
 import sys
 import unittest
+import unittest.mock
 from datetime import date
 from pathlib import Path
 
@@ -122,6 +123,25 @@ class FreshnessTests(unittest.TestCase):
         self.assertEqual(hit[0], 2)
         self.assertIn("3.12.1", hit[2])
         self.assertIsNone(s.newer_source_conflicts("The latest is Python 3.14.6 [2].", [old, new]))
+
+    def test_official_python_latest_picks_newest_stable_release(self):
+        feed = json.dumps([
+            {"name": "Python 3.14.7", "version": 3, "pre_release": False, "release_date": "2026-09-02T00:00:00Z"},
+            {"name": "Python 3.14.6", "version": 3, "pre_release": False, "release_date": "2026-08-01T00:00:00Z"},
+            {"name": "Python 3.11.17", "version": 3, "pre_release": False, "release_date": "2026-09-25T00:00:00Z"},
+            {"name": "Python 3.15.0rc1", "version": 3, "pre_release": True, "release_date": "2026-09-20T00:00:00Z"},
+            {"name": "Python 3.99.0", "version": 3, "pre_release": False, "release_date": "2030-01-01T00:00:00Z"},
+            {"name": "Python 2.7.18", "version": 2, "pre_release": False, "release_date": "2020-04-20T00:00:00Z"},
+        ]).encode()
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value.read.return_value = feed
+        with unittest.mock.patch.object(s, "urlopen", return_value=response):
+            found = s.official_python_latest(self.TODAY)
+        self.assertIn("Python 3.14.7", found["page_full"])
+        self.assertIn("2026-09-02", found["page_full"])
+        self.assertEqual(s.tier(found["url"]), 0)
+        with unittest.mock.patch.object(s, "urlopen", side_effect=OSError("offline")):
+            self.assertIsNone(s.official_python_latest(self.TODAY))
 
     def test_unsafe_version_claim_withholds_stale_or_unbacked_version(self):
         page = {"url": "https://www.python.org/downloads/", "page_full": "Python 3.14.7 is out. Earlier: 3.14.6, 3.13.9."}
