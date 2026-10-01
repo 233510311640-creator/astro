@@ -163,8 +163,8 @@ class QuestionSetTests(unittest.TestCase):
         questions = data["questions"]
         self.assertEqual(len(questions), 20)
         self.assertEqual(len({q["id"] for q in questions}), 20)
-        for category in ("stable_factual", "current_events", "multi_source_comparison", "health_or_technical"):
-            self.assertEqual(sum(q["category"] == category for q in questions), 5)
+        for category in ("research", "everyday"):
+            self.assertEqual(sum(q["category"] == category for q in questions), 10)
         for q in questions:
             for field in ("id", "category", "question", "expected_key_facts", "preferred_source_types", "evaluation_notes"):
                 self.assertTrue(q.get(field), (q.get("id"), field))

@@ -1,166 +1,322 @@
 {
-  "version": 1,
-  "note": "Draft evaluation set for v1/instant_search.py. Replace with real topics after the first week of use. Expected facts for current_events are time-varying: re-derive them from the primary source on the day of the run and record the date.",
-  "questions": [
-    {
-      "id": "F1",
-      "category": "stable_factual",
-      "question": "In what year was Python 1.0 released?",
-      "expected_key_facts": ["Python 1.0 was released in 1994 (January 1994)"],
-      "preferred_source_types": ["python.org documentation or release history", "Python Software Foundation"],
-      "evaluation_notes": "Live test 1 answered correctly but cited two non-official blogs even though python.org and Wikipedia were fetched. Pass requires an official/primary citation."
-    },
-    {
-      "id": "F2",
-      "category": "stable_factual",
-      "question": "What is the exact speed of light in a vacuum in metres per second?",
-      "expected_key_facts": ["299,792,458 m/s", "the value is exact because the metre is defined from it"],
-      "preferred_source_types": ["NIST", "BIPM"],
-      "evaluation_notes": "Fail if it gives a rounded value as exact, or cites only a blog."
-    },
-    {
-      "id": "F3",
-      "category": "stable_factual",
-      "question": "What is the capital of Australia, and when did Parliament first sit there?",
-      "expected_key_facts": ["Canberra", "Parliament first met in Canberra in 1927"],
-      "preferred_source_types": ["Australian Government (australia.gov.au)", "Parliament of Australia (aph.gov.au)"],
-      "evaluation_notes": "Tests a two-part answer; common error is naming Sydney or Melbourne, or omitting the date."
-    },
-    {
-      "id": "F4",
-      "category": "stable_factual",
-      "question": "On what date did Apollo 11 land on the Moon?",
-      "expected_key_facts": ["20 July 1969", "Neil Armstrong and Buzz Aldrin landed; Michael Collins stayed in orbit"],
-      "preferred_source_types": ["NASA"],
-      "evaluation_notes": "Date should be 20 July 1969 (UTC). Penalise unsupported extra detail."
-    },
-    {
-      "id": "F5",
-      "category": "stable_factual",
-      "question": "How many member states does the United Nations have?",
-      "expected_key_facts": ["193 member states"],
-      "preferred_source_types": ["un.org"],
-      "evaluation_notes": "Count is stable but verify on the run date; observer states (Holy See, Palestine) must not be counted as members."
-    },
-    {
-      "id": "C1",
-      "category": "current_events",
-      "question": "What was the outcome of the most recent US Federal Reserve interest rate decision?",
-      "expected_key_facts": ["the new federal funds target range", "the direction and size of the change", "the vote split", "the meeting date"],
-      "preferred_source_types": ["federalreserve.gov FOMC statement", "Reuters / AP", "BBC / CNN"],
-      "evaluation_notes": "Live test 2 stated 'unanimous' and a 3.75%-4% range without confirming either against a cited source. Every number and the vote split must appear in a cited source; the FOMC statement is the primary source."
-    },
-    {
-      "id": "C2",
-      "category": "current_events",
-      "question": "What is the Reserve Bank of India's current policy repo rate, and when was it last changed?",
-      "expected_key_facts": ["current repo rate", "date and size of the last change", "date of the latest MPC meeting"],
-      "preferred_source_types": ["rbi.org.in policy statement", "Reuters / PTI"],
-      "evaluation_notes": "Reject answers using a stale rate; the cited page date must be the most recent MPC meeting."
-    },
-    {
-      "id": "C3",
-      "category": "current_events",
-      "question": "What was the most recent US CPI inflation reading and the month it covers?",
-      "expected_key_facts": ["year-over-year CPI-U percentage", "reference month", "release date"],
-      "preferred_source_types": ["bls.gov CPI release", "Reuters / AP"],
-      "evaluation_notes": "Must distinguish month-over-month from year-over-year and headline from core."
-    },
-    {
-      "id": "C4",
-      "category": "current_events",
-      "question": "What is the latest stable release of Python, and when was it released?",
-      "expected_key_facts": ["latest stable version number", "release date"],
-      "preferred_source_types": ["python.org downloads", "Python release schedule PEP"],
-      "evaluation_notes": "Must not report a pre-release (alpha/beta/rc) as stable."
-    },
-    {
-      "id": "C5",
-      "category": "current_events",
-      "question": "What was ISRO's most recent orbital launch, and was it successful?",
-      "expected_key_facts": ["mission and vehicle name", "launch date", "success or failure outcome"],
-      "preferred_source_types": ["isro.gov.in", "PIB", "Reuters / The Hindu"],
-      "evaluation_notes": "Check the launch is the most recent as of the run date, and that the outcome is stated by a source, not inferred."
-    },
-    {
-      "id": "M1",
-      "category": "multi_source_comparison",
-      "question": "How does intermittent fasting compare with continuous calorie restriction for weight loss?",
-      "expected_key_facts": ["systematic reviews/RCTs find similar weight loss between the two", "adherence and individual preference are the main differentiators", "short trials and limited long-term data"],
-      "preferred_source_types": ["PubMed / PMC systematic reviews", "Cochrane", "NIH"],
-      "evaluation_notes": "Live test 3 cited a university repository (touroscholar) over fetched PMC/PubMed pages. Pass requires citing peer-reviewed or institutional-health sources and a health caveat."
-    },
-    {
-      "id": "M2",
-      "category": "multi_source_comparison",
-      "question": "How do lifecycle greenhouse gas emissions of battery electric cars compare with petrol cars?",
-      "expected_key_facts": ["BEVs generally lower lifecycle emissions", "manufacturing emissions higher for BEVs", "result depends on the electricity grid mix", "break-even distance varies by study"],
-      "preferred_source_types": ["IEA", "ICCT", "peer-reviewed studies", "government agencies"],
-      "evaluation_notes": "Must report disagreement or range between sources instead of a single number; no health caveat expected."
-    },
-    {
-      "id": "M3",
-      "category": "multi_source_comparison",
-      "question": "How does the levelised cost of electricity from utility-scale solar PV compare with onshore wind?",
-      "expected_key_facts": ["both are among the cheapest new-build sources in most regions", "relative ranking varies by region and year", "figures come from named reports (e.g. IRENA, Lazard, IEA)"],
-      "preferred_source_types": ["IRENA", "IEA", "Lazard LCOE", "national energy agencies"],
-      "evaluation_notes": "Penalise a single winner with no region or year; no health or financial-advice caveat expected."
-    },
-    {
-      "id": "M4",
-      "category": "multi_source_comparison",
-      "question": "For a single-user local desktop app, how do SQLite and PostgreSQL compare?",
-      "expected_key_facts": ["SQLite is serverless, single file, zero-config", "PostgreSQL is a client-server database with stronger concurrency and features", "SQLite suits embedded and single-user use"],
-      "preferred_source_types": ["sqlite.org 'Appropriate uses' page", "postgresql.org documentation"],
-      "evaluation_notes": "Both vendors are biased toward their own product; the answer should say so or use neutral sources. Must not add a professional-advice line."
-    },
-    {
-      "id": "M5",
-      "category": "multi_source_comparison",
-      "question": "What does the evidence say about remote work versus in-office work for productivity?",
-      "expected_key_facts": ["mixed evidence", "hybrid-work RCTs show little or no productivity loss", "results vary by task type, role and measurement"],
-      "preferred_source_types": ["peer-reviewed studies / NBER working papers", "major institutional surveys"],
-      "evaluation_notes": "Must report that sources disagree, and distinguish self-reported surveys from randomised trials."
-    },
-    {
-      "id": "H1",
-      "category": "health_or_technical",
-      "question": "Does vitamin D supplementation reduce fracture risk in healthy adults?",
-      "expected_key_facts": ["large trials (e.g. VITAL) and meta-analyses found no meaningful fracture reduction in generally healthy adults", "evidence differs for deficient, elderly or institutionalised people", "USPSTF finds insufficient evidence for primary prevention"],
-      "preferred_source_types": ["NIH Office of Dietary Supplements", "USPSTF", "Cochrane / NEJM / BMJ"],
-      "evaluation_notes": "Must keep healthy-adult evidence separate from deficient populations; must include a short check-with-a-professional line."
-    },
-    {
-      "id": "H2",
-      "category": "health_or_technical",
-      "question": "Is it safe to take ibuprofen and acetaminophen (paracetamol) together?",
-      "expected_key_facts": ["they work by different mechanisms and are commonly combined or alternated at label doses", "daily maximum doses of each still apply", "kidney, stomach, liver or pregnancy risks need a pharmacist or doctor"],
-      "preferred_source_types": ["NHS", "MedlinePlus / NIH", "FDA labelling"],
-      "evaluation_notes": "Must not give a personalised dose; must include a professional-advice line; fail if it implies unlimited dosing."
-    },
-    {
-      "id": "H3",
-      "category": "health_or_technical",
-      "question": "Does creatine supplementation damage the kidneys in healthy adults?",
-      "expected_key_facts": ["studies in healthy adults at recommended doses show no kidney damage", "creatine can raise serum creatinine without reflecting kidney injury", "people with existing kidney disease should consult a clinician"],
-      "preferred_source_types": ["position stands (ISSN)", "systematic reviews on PubMed", "NIH / Mayo Clinic"],
-      "evaluation_notes": "Must separate healthy adults from kidney patients and flag that many sources are supplement sellers (the prompt rule on sellers should trigger)."
-    },
-    {
-      "id": "H4",
-      "category": "health_or_technical",
-      "question": "What is the minimum TLS version recommended by NIST SP 800-52 Rev. 2 for servers?",
-      "expected_key_facts": ["TLS 1.2 is the minimum", "servers were required to support TLS 1.3 by January 2024", "TLS 1.0 and 1.1 must not be used"],
-      "preferred_source_types": ["NIST publication (csrc.nist.gov)"],
-      "evaluation_notes": "Technical, not health: must NOT include a 'consult a professional' health line. Check version-specific claims against the NIST document."
-    },
-    {
-      "id": "H5",
-      "category": "health_or_technical",
-      "question": "Is it safe to use Python's pickle module to load data from an untrusted source?",
-      "expected_key_facts": ["no: unpickling untrusted data can execute arbitrary code", "alternatives such as JSON or hmac-signed data are suggested", "the official documentation carries an explicit warning"],
-      "preferred_source_types": ["docs.python.org pickle module documentation"],
-      "evaluation_notes": "Technical security caveat is required; a generic professional-advice line is not. Fail if it calls pickle safe in any untrusted-data case."
-    }
-  ]
+ "version": 2,
+ "note": "Two-week daily-use evaluation set for v1/instant_search.py (research and everyday). Expected values are time-varying: verify each answer against the primary source on the run date and record that date. expected_key_facts lists what a good answer must contain, not fixed values.",
+ "questions": [
+  {
+   "id": "R1",
+   "category": "research",
+   "question": "Where can I get official monthly CPI inflation data for India as a downloadable dataset, and what format and update schedule does it have?",
+   "expected_key_facts": [
+    "dataset page URL",
+    "file format (CSV, XLSX or API)",
+    "release schedule",
+    "last update date",
+    "licence or terms"
+   ],
+   "preferred_source_types": [
+    "MoSPI",
+    "data.gov.in"
+   ],
+   "evaluation_notes": "Must point to an official dataset page, not a news article or third-party mirror."
+  },
+  {
+   "id": "R2",
+   "category": "research",
+   "question": "Compare the current RBI repo rate with the US federal funds target range. Give each rate, the date it took effect, and the date of the last change.",
+   "expected_key_facts": [
+    "both rates",
+    "both effective dates",
+    "direction and size of the last change for each",
+    "one link per figure"
+   ],
+   "preferred_source_types": [
+    "rbi.org.in policy statement",
+    "federalreserve.gov FOMC statement"
+   ],
+   "evaluation_notes": "Fail if any figure rests on a news summary alone or is stale relative to the latest meeting."
+  },
+  {
+   "id": "R3",
+   "category": "research",
+   "question": "Which free or low-cost APIs offer historical daily weather data for an Indian city? Compare auth, rate limits and terms.",
+   "expected_key_facts": [
+    "at least 3 APIs",
+    "docs link for each",
+    "auth method",
+    "stated rate limit",
+    "licence or attribution terms",
+    "note on anything that could not be verified"
+   ],
+   "preferred_source_types": [
+    "official API docs for Open-Meteo, NOAA, IMD"
+   ],
+   "evaluation_notes": "Rate limits and terms must come from the provider's own docs; unverifiable items must be labelled."
+  },
+  {
+   "id": "R4",
+   "category": "research",
+   "question": "What are Brave Search API's current pricing, free tier and usage terms, and how do they compare with Tavily's?",
+   "expected_key_facts": [
+    "plan names",
+    "prices with currency",
+    "quota per plan",
+    "whether results may be stored or cached",
+    "date each page was read",
+    "unclear terms flagged, not guessed"
+   ],
+   "preferred_source_types": [
+    "the providers' own pricing and terms pages"
+   ],
+   "evaluation_notes": "V1_SPEC lists pricing as unverified, so this result informs a real decision. Fail on any price or quota not on a cited provider page."
+  },
+  {
+   "id": "R5",
+   "category": "research",
+   "question": "Build a table of the last 4 FOMC meetings: date, decision, target range and vote split.",
+   "expected_key_facts": [
+    "4 rows",
+    "source link per row",
+    "vote split matching the statement",
+    "unverified cells marked 'not verified'"
+   ],
+   "preferred_source_types": [
+    "federalreserve.gov FOMC calendar and statements"
+   ],
+   "evaluation_notes": "Pass requires no unsupported cell; a gap must be marked, not filled."
+  },
+  {
+   "id": "R6",
+   "category": "research",
+   "question": "Does rbi.org.in's robots.txt or terms permit automated collection of press releases? What is the safest compliant way to collect them?",
+   "expected_key_facts": [
+    "quoted robots.txt rules",
+    "terms page URL",
+    "plain permitted or unclear verdict",
+    "alternative such as RSS or an official API where one exists"
+   ],
+   "preferred_source_types": [
+    "rbi.org.in /robots.txt",
+    "rbi.org.in site terms"
+   ],
+   "evaluation_notes": "Tests the spec rule to check robots.txt and terms before extraction. Fail if it asserts a verdict without reading both."
+  },
+  {
+   "id": "R7",
+   "category": "research",
+   "question": "Compare global EV sales for last year as reported by IEA, BloombergNEF and Rho Motion.",
+   "expected_key_facts": [
+    "each figure with publisher, report title and date",
+    "where the figures disagree and why (for example BEV only vs BEV plus PHEV)",
+    "no averaging of the figures"
+   ],
+   "preferred_source_types": [
+    "the publishers' own reports or press releases"
+   ],
+   "evaluation_notes": "Fail if it blends figures or ignores definitional differences."
+  },
+  {
+   "id": "R8",
+   "category": "research",
+   "question": "Find official datasets or APIs for India's city-level air quality (AQI). Which one gives historical data?",
+   "expected_key_facts": [
+    "source names and URLs",
+    "whether history is available and from what date",
+    "access method",
+    "licence",
+    "limits"
+   ],
+   "preferred_source_types": [
+    "CPCB",
+    "data.gov.in",
+    "OpenAQ docs"
+   ],
+   "evaluation_notes": "Must name which source has history and from when; vague 'several sources exist' fails."
+  },
+  {
+   "id": "R9",
+   "category": "research",
+   "question": "What is the current status of free-threaded (no-GIL) Python in the latest stable release?",
+   "expected_key_facts": [
+    "release number",
+    "whether it is supported, experimental or default",
+    "relevant PEP or docs link",
+    "'could not verify' section"
+   ],
+   "preferred_source_types": [
+    "docs.python.org What's New",
+    "PEP 703",
+    "PEP 779"
+   ],
+   "evaluation_notes": "Must not report a pre-release as the latest stable; status wording must match the docs."
+  },
+  {
+   "id": "R10",
+   "category": "research",
+   "question": "Extract the last 4 quarters of India's GDP growth rate as a table with release dates.",
+   "expected_key_facts": [
+    "4 rows: quarter, YoY growth, release date, source link",
+    "note on any revision between sources",
+    "stated basis (base year or constant prices)"
+   ],
+   "preferred_source_types": [
+    "MoSPI / NSO press releases",
+    "RBI or World Bank as cross-check"
+   ],
+   "evaluation_notes": "Fail on mixed bases or on figures without a release date."
+  },
+  {
+   "id": "E1",
+   "category": "everyday",
+   "question": "What is the latest stable Python release and its release date?",
+   "expected_key_facts": [
+    "version number",
+    "release date",
+    "never an alpha, beta or rc"
+   ],
+   "preferred_source_types": [
+    "python.org downloads",
+    "official release feed"
+   ],
+   "evaluation_notes": "Regression check for the earlier stale-Python-version failure. Must come from the official feed or python.org."
+  },
+  {
+   "id": "E2",
+   "category": "everyday",
+   "question": "What is the current Node.js LTS version, and when does it reach end of life?",
+   "expected_key_facts": [
+    "LTS version",
+    "LTS start date",
+    "end-of-life date",
+    "link to the official schedule"
+   ],
+   "preferred_source_types": [
+    "nodejs.org release schedule"
+   ],
+   "evaluation_notes": "Must distinguish LTS from Current."
+  },
+  {
+   "id": "E3",
+   "category": "everyday",
+   "question": "What did Anthropic announce in the last 7 days?",
+   "expected_key_facts": [
+    "each item dated",
+    "each item linked to a primary announcement",
+    "says so if nothing was announced"
+   ],
+   "preferred_source_types": [
+    "anthropic.com news",
+    "Reuters or The Verge as corroboration"
+   ],
+   "evaluation_notes": "Fail on items older than 7 days presented as new, or gaps filled with speculation."
+  },
+  {
+   "id": "E4",
+   "category": "everyday",
+   "question": "What are today's top 3 India business headlines?",
+   "expected_key_facts": [
+    "3 headlines",
+    "outlet, publication date or time and link for each",
+    "stated date for 'today'"
+   ],
+   "preferred_source_types": [
+    "at least 2 outlets (for example The Hindu, Reuters, PTI)"
+   ],
+   "evaluation_notes": "Fail if any headline older than 48 hours is presented as new."
+  },
+  {
+   "id": "E5",
+   "category": "everyday",
+   "question": "What is the latest Windows 11 cumulative update, with its KB number and release date?",
+   "expected_key_facts": [
+    "KB number",
+    "build number",
+    "release date",
+    "note if it is a preview update rather than Patch Tuesday"
+   ],
+   "preferred_source_types": [
+    "Microsoft release health",
+    "Microsoft update history pages"
+   ],
+   "evaluation_notes": "Must come from Microsoft, not a blog."
+  },
+  {
+   "id": "E6",
+   "category": "everyday",
+   "question": "How do I set a timeout and retries in httpx?",
+   "expected_key_facts": [
+    "short working snippet",
+    "docs link",
+    "library version the advice applies to"
+   ],
+   "preferred_source_types": [
+    "httpx official docs"
+   ],
+   "evaluation_notes": "Fail if retries are described as built in for request-level behaviour without matching the docs (transport retries versus application retries)."
+  },
+  {
+   "id": "E7",
+   "category": "everyday",
+   "question": "Compare Ollama and LM Studio for running local models on Windows: GPU support, local API and licence.",
+   "expected_key_facts": [
+    "short side-by-side",
+    "link per claim",
+    "licence of each",
+    "admission where the docs do not say"
+   ],
+   "preferred_source_types": [
+    "official docs and GitHub of each project"
+   ],
+   "evaluation_notes": "Fail on licence or API claims not found on an official page."
+  },
+  {
+   "id": "E8",
+   "category": "everyday",
+   "question": "Compare the INR price of ChatGPT Plus, Claude Pro and Gemini's paid plan in India.",
+   "expected_key_facts": [
+    "price per plan with currency",
+    "billing period",
+    "whether tax is included",
+    "date each page was read",
+    "says so if a vendor shows no INR price, no silent conversion"
+   ],
+   "preferred_source_types": [
+    "each vendor's own pricing page"
+   ],
+   "evaluation_notes": "Fail on prices from review sites or on unlabelled currency conversion."
+  },
+  {
+   "id": "E9",
+   "category": "everyday",
+   "question": "What does HTTP 429 mean, and how should a client handle it?",
+   "expected_key_facts": [
+    "status text (Too Many Requests)",
+    "Retry-After header",
+    "backoff advice",
+    "link",
+    "3 sentences or fewer"
+   ],
+   "preferred_source_types": [
+    "MDN",
+    "RFC 6585",
+    "RFC 9110"
+   ],
+   "evaluation_notes": "Concise factual check; target time to first answer within 4 seconds."
+  },
+  {
+   "id": "E10",
+   "category": "everyday",
+   "question": "What is the latest Chrome stable version, and did that release fix any actively exploited vulnerability?",
+   "expected_key_facts": [
+    "version number",
+    "release date",
+    "whether the notes say a CVE is exploited in the wild, with the CVE ID",
+    "says so if the notes are silent"
+   ],
+   "preferred_source_types": [
+    "Chrome Releases blog",
+    "Google security notes"
+   ],
+   "evaluation_notes": "Must not infer exploitation status; the release notes must state it."
+  }
+ ]
 }
